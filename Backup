@@ -2,7 +2,6 @@
 #timeout=30000000
 $userName = (Get-WmiObject -class Win32_ComputerSystem ).username -replace '^.*\\'
 $7zipPath = "$env:ProgramFiles\7-Zip\7z.exe"
-
 if (-not (Test-Path -Path $7zipPath -PathType Leaf)) {
     throw "7 zip file '$7zipPath' not found"
 }
@@ -17,10 +16,16 @@ if ($firefoxProcesses) {
 
 Set-Alias Start-SevenZip $7zipPath
 
-$Source = "C:\Users\$userName\AppData\Roaming\Mozilla\Firefox\Profiles"
-$Target = "C:\Users\$userName\OneDrive - Guidepoint\browser-backup-script\browserscriptfirefox.zip"
-$esrSource = Get-ChildItem -Path $Source -Filter "*-esr" -Directory
+# Define paths using universal approach - detect OneDrive folder dynamically
+$oneDriveFolder = Get-ChildItem "$env:USERPROFILE" -Directory | Where-Object {$_.Name -like "OneDrive*"} | Select-Object -First 1
+if (-not $oneDriveFolder) {
+    throw "OneDrive folder not found in user profile"
+}
 
+$Source = "$env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles"
+$Target = Join-Path $oneDriveFolder.FullName "browser-backup-script\browserscriptfirefox.zip"
+
+$esrSource = Get-ChildItem -Path $Source -Filter "*-esr" -Directory
 foreach ($esrFolder in $esrSource) {
     $esrFolderPath = $esrFolder.FullName
     Start-SevenZip a -mx=9 $Target $esrFolderPath
