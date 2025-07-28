@@ -1,0 +1,53 @@
+#!ps
+#timeout=30000000
+$userName = (Get-WmiObject -class Win32_ComputerSystem).username -replace '^.*\\'
+$7zipPath = "$env:ProgramFiles\7-Zip\7z.exe"
+if (-not (Test-Path -Path $7zipPath -PathType Leaf)) {
+    throw "7-Zip executable '$7zipPath' not found"
+}
+Set-Alias Start-SevenZip $7zipPath
+
+# Define paths using universal approach - detect OneDrive folder dynamically
+$oneDriveFolder = Get-ChildItem "$env:USERPROFILE" -Directory | Where-Object {$_.Name -like "OneDrive*"} | Select-Object -First 1
+if (-not $oneDriveFolder) {
+    throw "OneDrive folder not found in user profile"
+}
+$sourceZipFilefirefox = Join-Path $oneDriveFolder.FullName "browser-backup-script\browserscriptfirefox.zip"
+$tempUnzipPath = "C:\temp\unzipped"
+$firefoxProfilesPath = "$env:USERPROFILE\AppData\Roaming\Mozilla\Firefox\Profiles"
+$backupProfilesPath = "${firefoxProfilesPath}.old"
+$renameEsrNew = "rename-esr-new"
+
+# Log actions
+Write-Output "Copying ${sourceZipFilefirefox} to C:\temp"
+Copy-Item -Path $sourceZipFilefirefox -Destination "C:\temp" -Force
+
+# Unzip the browserscriptfirefox.zip file to C:\temp\unzipped
+Write-Output "Unzipping C:\temp\browserscriptfirefox.zip to ${tempUnzipPath}"
+Start-SevenZip x -o"$tempUnzipPath" "C:\temp\browserscriptfirefox.zip" -y
+
+# Rename existing -esr folders to -esr.old
+$esrFolders = Get-ChildItem -Path $firefoxProfilesPath -Directory -Filter "*-esr"
+foreach ($folder in $esrFolders) {
+    $newName = "$($folder.Name).old"
+    Write-Output "Renaming $($folder.FullName) to $($folder.Parent.FullName)\$newName"
+    Rename-Item -Path $folder.FullName -NewName $newName
+}
+
+# Move the unzipped folder to the Firefox Profiles directory and rename it
+$unzippedFolders = Get-ChildItem -Path $tempUnzipPath -Directory
+if ($unzippedFolders -ne $null) {
+    $unzippedFolder = $unzippedFolders[0].FullName
+    $destinationFolder = Join-Path -Path $firefoxProfilesPath -ChildPath $renameEsrNew
+    Write-Output "Moving $unzippedFolder to $destinationFolder"
+    Move-Item -Path $unzippedFolder -Destination $destinationFolder
+} else {
+    Write-Output "Unzipped folder not found in $tempUnzipPath"
+    exit
+}
+
+# Clean up temp folder if needed
+if (Test-Path -Path $tempUnzipPath) {
+    Write-Output "Cleaning up ${tempUnzipPath}"
+    Remove-Item -Path $tempUnzipPath -Recurse -Force
+}
